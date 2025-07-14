@@ -58,6 +58,14 @@ def markov_process(G_old, z_old):
             p = np.clip(p, 0, 1)
             if np.random.rand() < p:
                 G_new.add_edge(i, j, weight=1.0)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if z_old[j] == 1:
+                continue
+            p = abs(z_old[i] - z_old[j])
+            p = np.clip(p, 0, 1)
+            if np.random.rand() < p:
+                G_new.remove_edge(i, j)
     return G_new
 
 def time_evolution(z0, t):
