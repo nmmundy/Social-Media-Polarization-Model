@@ -42,7 +42,9 @@ def polarization_adjustments(G, s):
     z = opinion_dynamics(G, s)
     #return polarization(z) + disagreement_weights(G, z), z
     return -polarization(z), z
-
+    
+## Not using this anymore but just keeping it in case
+'''
 def markov_process(G_old, z_old):
     G_new = nx.Graph()
     G_new.add_nodes_from(G_old.nodes())
@@ -76,7 +78,7 @@ def markov_process(G_old, z_old):
                     G_new.remove_edge(i, j)
 
     return G_new
-
+'''
 def metropolis_step(G, z, s, alpha = 5.0):
     G_prime = G.copy()
     n = len(z)
