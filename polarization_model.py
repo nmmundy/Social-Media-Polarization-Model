@@ -46,36 +46,7 @@ def polarization_adjustments(G, s):
     z = opinion_dynamics(G, s)
     #return polarization(z) + disagreement_weights(G, z), z
     return -polarization(z), z
-    return polarization(z) + disagreement_weights(G, z), z
-    #return -polarization(z), z #flipped the sign to encourage polarization
 
-#Attemped some fixes but this version of the method is broken currently 
-#(though I think it is more correct)
-''' 
-def markov_process(G_old, z_old):
-    G_new = nx.Graph()
-    G_new.add_nodes_from(G_old.nodes())
-    n = len(z_old)
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if z_old[j] == 0 or z_old[i] == 0:
-                continue
-            p_add = max(0, 1 - abs(z_old[i] / z_old[j] - 1))
-            p_remove = abs(z_old[i] - z_old[j])
-
-            p_add = np.clip(p_add, 0, 1)
-            p_remove = np.clip(p_remove, 0, 1)
-
-        if G_old.has_edge(i, j):
-            if np.random.rand() > p_remove:
-                G_new.add_edge(i, j, weight=1.0)
-            else:
-                if np.random.rand() < p_add:
-                    G_new.add_edge(i, j, weight=1.0)
-
-    return G_new
-'''
 def markov_process(G_old, z_old):
     G_new = nx.Graph()
     G_new.add_nodes_from(G_old.nodes())
