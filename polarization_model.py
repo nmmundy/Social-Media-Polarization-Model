@@ -4,6 +4,8 @@ from scipy.sparse import identity
 from scipy.sparse.linalg import spsolve
 import matplotlib.pyplot as plt
 
+## add in alhpha and beta parameters:
+## exponential for the probabilities
 ##Comments on the code:
     ##It is quite basic and with the current set up it almost alwasy adds a new edge 
     ##since the probabily with n = 5 and 15 time steps and the 1 values is polarizing while 0 would not
@@ -15,11 +17,11 @@ import matplotlib.pyplot as plt
     ##Newtork polarization = polarization + disagreements
 
 
-#Uses Friedkin-Johbson opinion model from paper in overleaf notes
+#Uses Friedkin-Johnson opinion model from paper in overleaf notes
 #Each node maintaines an inate opinion and the update to a node is based on 
 #expressed opinion z_i.
 def opinion_dynamics(G, s):
-    L = nx.laplacian_matrix(G).astype(float)
+    L = nx.laplacian_matrix(G).astype(float) #Laplacian from paper
     I = identity(L.shape[0])
     return spsolve(I + L, s)
 
@@ -38,7 +40,8 @@ def polarization(z):
 
 def polarization_adjustments(G, s):
     z = opinion_dynamics(G, s)
-    return polarization(z) + disagreement_weights(G, z), z
+    #return polarization(z) + disagreement_weights(G, z), z
+    return -polarization(z), z
 
 def markov_process(G_old, z_old):
     G_new = nx.Graph()
@@ -58,52 +61,81 @@ def markov_process(G_old, z_old):
             p = np.clip(p, 0, 1)
             if np.random.rand() < p:
                 G_new.add_edge(i, j, weight=1.0)
+        
+        #removes an edge aka removes a following
+        #Seems to somewhat work, the plot of the graph just looks kind of odd and random, but 
+        # i think that is just due to how matplotlib is placing the nodes, may need to add a grid so its
+        # more stuctured
+        for i in range(n):
+            for j in range(i + 1, n):
+                if not G_new.has_edge(i, j):  #skips non‑existent edges
+                    continue
+                # 1-p from above? might be more right as not 100% sure they add to 1 which is bad
+                p = abs(z_old[j] - z_old[i])        # fixed index & formula
+                if np.random.rand() < np.clip(p, 0, 1):
+                    G_new.remove_edge(i, j)
+
     return G_new
 
-def time_evolution(z0, t):
+def metropolis_step(G, z, s, alpha = 5.0):
+    G_prime = G.copy()
+    n = len(z)
+    i, j = np.random.choice(n, 2, replace=False)
+
+    if G.has_edge(i, j):
+        G_prime.remove_edge(i, j)
+    else:
+        G_prime.add_edge(i, j, weight=1.0)
+
+    E_old, _ = polarization_adjustments(G, s)
+    E_new, _ = polarization_adjustments(G_prime, s)
+
+    delta_E = E_new - E_old
+    accept_prob = min(1, np.exp(-alpha * delta_E))
+
+    if np.random.rand() < accept_prob:
+        return G_prime
+    else:
+        return G
+
+def time_evolution(z0, t, alpha):
     n = len(z0)
-    Gr_i = []
-    z_i = []
-    I_i = []
 
     #Initialize the network
     G = nx.complete_graph(n)
-    nx.set_edge_attributes(G, 1, 'weight')
+    nx.set_edge_attributes(G, 1., 'weight')
 
+    #Plot stuff
     plt.ion() #plot interactivity
     fig = plt.figure(figsize=(5, 4))
 
     for time in range (t):
         I, z = polarization_adjustments(G, z0)
-        Gr_i.append(G.copy())
-        z_i.append(z.copy())
-        I_i.append(I)
         print(f"t = {time}, Network Polarization = {I:.4f}")
-        #draw_graph(G, z, time)
-        G = markov_process(G, z)
+        draw_graph(G, z, time)
+        G = metropolis_step(G, z, z0, alpha)
 
-        #plt.ioff()
+        ##more plot stuff
+        plt.ioff()
         #plt.show()
-    #return Gr_i, z_i, I_i
 
-#def draw_graph(G, z, step):
+def draw_graph(G, z, step):
     plt.clf()
     pos = nx.spring_layout(G, seed=42)   # same layout every frame
-    # node colors = expressed opinions (bluer low, yellower high)
+    # node colors are the expressed opinions (blue color = low, yellow color = higher)
     nx.draw_networkx_nodes(G, pos,
         node_color=z, cmap='plasma', vmin=0, vmax=1,
         node_size=300, linewidths=1, edgecolors='black')
-    # thin gray edges
     nx.draw_networkx_edges(G, pos, alpha=0.4, width=1.0)
     plt.title(f"Step {step}")
     plt.axis('off')
-    plt.pause(0.3)   # short delay so the window updates
+    plt.pause(0.3) 
 
 if __name__ == "__main__":
     np.random.seed(32)
-    n = 5
-    t = 15
+    n = 20 # number of users
+    t = 100 # time steps
     z0 = np.random.rand(n)
 
     #Gr_i, z_i, I_i = 
-    time_evolution(z0, t)
+    time_evolution(z0, t, alpha=5.0)
