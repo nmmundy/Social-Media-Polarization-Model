@@ -44,9 +44,36 @@ def polarization(z):
 
 def polarization_adjustments(G, s):
     z = opinion_dynamics(G, s)
-    #return polarization(z) + disagreement_weights(G, z), z
-    return -polarization(z), z
+    return polarization(z) + disagreement_weights(G, z), z
+    #return -polarization(z), z #flipped the sign to encourage polarization
 
+#Attemped some fixes but this version of the method is broken currently 
+#(though I think it is more correct)
+''' 
+def markov_process(G_old, z_old):
+    G_new = nx.Graph()
+    G_new.add_nodes_from(G_old.nodes())
+    n = len(z_old)
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if z_old[j] == 0 or z_old[i] == 0:
+                continue
+            p_add = max(0, 1 - abs(z_old[i] / z_old[j] - 1))
+            p_remove = abs(z_old[i] - z_old[j])
+
+            p_add = np.clip(p_add, 0, 1)
+            p_remove = np.clip(p_remove, 0, 1)
+
+        if G_old.has_edge(i, j):
+            if np.random.rand() > p_remove:
+                G_new.add_edge(i, j, weight=1.0)
+            else:
+                if np.random.rand() < p_add:
+                    G_new.add_edge(i, j, weight=1.0)
+
+    return G_new
+'''
 def markov_process(G_old, z_old):
     G_new = nx.Graph()
     G_new.add_nodes_from(G_old.nodes())
@@ -60,6 +87,7 @@ def markov_process(G_old, z_old):
                 continue
             #probablities 
             #Adding in a new edge with probability specificed in overleaf
+            p = max(0, 1 - abs(z_old[i] / z_old[j] - 1))
             p = max(0, 1 - abs(z_old[i] / z_old[j] - 1))
             #print(f"p = {p}")
             p = np.clip(p, 0, 1)
@@ -75,7 +103,7 @@ def markov_process(G_old, z_old):
                 if not G_new.has_edge(i, j):  #skips non‑existent edges
                     continue
                 # 1-p from above? might be more right as not 100% sure they add to 1 which is bad
-                p = abs(z_old[j] - z_old[i])        # fixed index & formula
+                p = abs(z_old[i] - z_old[j])       # fixed index & formula
                 if np.random.rand() < np.clip(p, 0, 1):
                     G_new.remove_edge(i, j)
 
@@ -117,35 +145,39 @@ def metropolis_step(G, z, s, alpha=1.0, proposals_per_step=10):
 
     return G_new
 
-def metropolis_step(G, z, s, alpha = 5.0):
-    G_prime = G.copy()
+def metropolis_step(G, z, s, alpha=1.0, proposals_per_step=10):
+    G_new = G.copy()
     n = len(z)
-    i, j = np.random.choice(n, 2, replace=False)
+    for _ in range(proposals_per_step):
+        i, j = np.random.choice(n, 2, replace=False)
+        G_prime = G_new.copy()
 
-    if G.has_edge(i, j):
-        G_prime.remove_edge(i, j)
-    else:
-        G_prime.add_edge(i, j, weight=1.0)
+        if G_new.has_edge(i, j):
+            G_prime.remove_edge(i, j)
+        else:
+            G_prime.add_edge(i, j, weight=1.0)
 
-    E_old, _ = polarization_adjustments(G, s)
-    E_new, _ = polarization_adjustments(G_prime, s)
+        E_old, _ = polarization_adjustments(G_new, s)
+        E_new, _ = polarization_adjustments(G_prime, s)
+        delta_E = E_new - E_old
+        accept_prob = min(1, np.exp(alpha * delta_E))
 
-    delta_E = E_new - E_old
-    accept_prob = min(1, np.exp(-alpha * delta_E))
+        if np.random.rand() < accept_prob:
+            G_new = G_prime
 
-    if np.random.rand() < accept_prob:
-        return G_prime
-    else:
-        return G
+    return G_new
 
 def time_evolution(z0, t, alpha):
 def time_evolution(z0, t, alpha, proposals, metropolis):
+def time_evolution(z0, t, alpha, proposals, metropolis):
     n = len(z0)
-
     #Initialize the network
     G = nx.complete_graph(n)
     nx.set_edge_attributes(G, 1., 'weight')
     nx.set_edge_attributes(G, 1., 'weight')
+
+    fig_energy, ax_energy = plt.subplots(figsize=(6, 3))
+    polarization_trace = []
 
     fig_energy, ax_energy = plt.subplots(figsize=(6, 3))
     polarization_trace = []
@@ -157,7 +189,8 @@ def time_evolution(z0, t, alpha, proposals, metropolis):
 
     for time in range (t):
         I, z = polarization_adjustments(G, z0)
-        print(f"t = {time}, Network Polarization = {I:.4f}")
+        #print(f"t = {time}, Network Polarization = {I:.4f}")
+        polarization_trace.append(I)
         draw_graph(G, z, time)
         G = metropolis_step(G, z, z0, alpha)
         #print(f"t = {time}, Network Polarization = {I:.4f}")
@@ -171,9 +204,16 @@ def time_evolution(z0, t, alpha, proposals, metropolis):
 
         ##more plot stuff
         plt.ioff()
+        draw_energy(polarization_trace, ax_energy)
+        if metropolis:
+            G = metropolis_step(G, z, z0, alpha, proposals)
+        else:
+            G = markov_process(G, z)
+
 
         ##more plot stuff
         plt.ioff()
+        #plt.show(block=True)
         #plt.show(block=True)
         #plt.show()
 
@@ -201,11 +241,23 @@ def draw_energy(energy_trace, ax):
     ax.legend()
     ax.grid(True)
     plt.pause(0.01)
+    plt.pause(0.1) 
+
+def draw_energy(energy_trace, ax):
+    ax.clear()
+    ax.plot(energy_trace, label='Polarization')
+    ax.set_xlabel("Time Step")
+    ax.set_ylabel("Polarization")
+    ax.set_title("Polarization Over Time")
+    ax.legend()
+    ax.grid(True)
+    plt.pause(0.01)
 
 if __name__ == "__main__":
     np.random.seed(32)
     n = 20 # number of users
     t = 100 # time steps
+    n = 25 # number of users
     n = 25 # number of users
     t = 100 # time steps
     z0 = np.random.rand(n)
@@ -213,7 +265,12 @@ if __name__ == "__main__":
     proposals = 10
     #picking which function metropolis or our original mc function
     metropolis = True
+    alpha = 1.
+    proposals = 10
+    #picking which function metropolis or our original mc function
+    metropolis = True
 
     #Gr_i, z_i, I_i = 
     time_evolution(z0, t, alpha=5.0)
+    time_evolution(z0, t, alpha, proposals, metropolis)
     time_evolution(z0, t, alpha, proposals, metropolis)
