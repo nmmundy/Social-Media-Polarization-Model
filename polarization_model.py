@@ -167,8 +167,6 @@ def metropolis_step(G, z, s, alpha=1.0, proposals_per_step=10):
 
     return G_new
 
-def time_evolution(z0, t, alpha):
-def time_evolution(z0, t, alpha, proposals, metropolis):
 def time_evolution(z0, t, alpha, proposals, metropolis):
     n = len(z0)
     #Initialize the network
@@ -217,7 +215,6 @@ def time_evolution(z0, t, alpha, proposals, metropolis):
         #plt.show(block=True)
         #plt.show()
 
-def draw_graph(G, z, step):
 def draw_graph(G, z, step):
     plt.clf()
     pos = nx.spring_layout(G, seed=42)   # same layout every frame
