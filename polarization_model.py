@@ -237,34 +237,16 @@ def draw_energy(energy_trace, ax):
     plt.pause(0.01)
     plt.pause(0.1) 
 
-def draw_energy(energy_trace, ax):
-    ax.clear()
-    ax.plot(energy_trace, label='Polarization')
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Polarization")
-    ax.set_title("Polarization Over Time")
-    ax.legend()
-    ax.grid(True)
-    plt.pause(0.01)
-
 if __name__ == "__main__":
     np.random.seed(32)
     n = 20 # number of users
-    t = 100 # time steps
-    n = 25 # number of users
-    n = 25 # number of users
     t = 100 # time steps
     z0 = np.random.rand(n)
     alpha = 1.
     proposals = 10
     #picking which function metropolis or our original mc function
     metropolis = True
-    alpha = 1.
-    proposals = 10
-    #picking which function metropolis or our original mc function
-    metropolis = True
 
     #Gr_i, z_i, I_i = 
-    time_evolution(z0, t, alpha=5.0)
-    time_evolution(z0, t, alpha, proposals, metropolis)
+    #time_evolution(z0, t, alpha=5.0)
     time_evolution(z0, t, alpha, proposals, metropolis)
