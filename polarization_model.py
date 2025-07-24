@@ -18,13 +18,10 @@ import matplotlib.pyplot as plt
     ## from a mathematical standpoint.
     ##Newtork polarization = polarization + disagreements
 
-
-#Uses Friedkin-Johnson opinion model from paper in overleaf notes
 #Uses Friedkin-Johnson opinion model from paper in overleaf notes
 #Each node maintaines an inate opinion and the update to a node is based on 
 #expressed opinion z_i.
 def opinion_dynamics(G, s):
-    L = nx.laplacian_matrix(G).astype(float) #Laplacian from paper
     L = nx.laplacian_matrix(G).astype(float) #Laplacian from paper
     I = identity(L.shape[0])
     return spsolve(I + L, s)
