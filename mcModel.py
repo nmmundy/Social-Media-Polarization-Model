@@ -32,4 +32,18 @@ def opinion(z):
 def nodeStress(G, s):
     z = FreidkinJohnsonEquilibruim(G, s)
     return disagreement(G, z) + opinion(z), z
-    
+
+
+def markov_chain(G, z):
+    G_prime = nx.graph() # create network
+    G_prime.add_nodes_from(G.nodes())
+
+
+    return G_prime
+
+
+if __name__=="__main__":
+    n = 20 # number of users
+    t = 100 # number of time steps
+    z_init = np.random.rand(1)
+    G = nx.complete_graph(n)
