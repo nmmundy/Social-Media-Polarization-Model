@@ -1,3 +1,5 @@
+import random
+
 import networkx as nx
 import numpy as np
 from scipy.sparse import identity
@@ -33,17 +35,31 @@ def nodeStress(G, s):
     z = FreidkinJohnsonEquilibruim(G, s)
     return disagreement(G, z) + opinion(z), z
 
-
-def markov_chain(G, z):
-    G_prime = nx.graph() # create network
+def opinionUpdate(G, z):
+    G_prime = G  # create network
     G_prime.add_nodes_from(G.nodes())
+    node_i = random.choice(list(G.prime.nodes()))
+    n = len(z)
+    op2=0
+    w2 = 0
+    for j in range(n):
+        edgeWeight = G.prime[node_i][i].get(w)
+        j_z = z[j]
+        op2 = op2+(z[j] * edgeWeight)
+        w2 = w2 + edgeWeight
+    z_prime = (z[node_i]+op2)/(1+w2)
+    G_prime.nodes[node_i]= z_prime
 
+    bernouli_p= 1-abs(z[node_i]-z_prime)
 
-    return G_prime
-
+    if random.Random() < bernouli_p
+        return G_prime
+    else
+        return G
 
 if __name__=="__main__":
     n = 20 # number of users
     t = 100 # number of time steps
     z_init = np.random.rand(1)
     G = nx.complete_graph(n)
+    
