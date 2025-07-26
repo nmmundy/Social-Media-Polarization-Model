@@ -36,10 +36,13 @@ def nodeStress(G, s):
 
 def markov_chain(G, z):
     G_prime = nx.graph() # create network
-    G_prime.add_nodes_from(G.nodes())
+    G_prime.add_nodes_from(G.nodes()) # add over nodes from initialized graph G
+    
 
 
     return G_prime
+
+
 
 
 if __name__=="__main__":
@@ -47,3 +50,4 @@ if __name__=="__main__":
     t = 100 # number of time steps
     z_init = np.random.rand(1)
     G = nx.complete_graph(n)
+    markov_chain(G, z_init)
