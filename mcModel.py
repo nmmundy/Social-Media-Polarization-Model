@@ -68,7 +68,7 @@ def edgeUpdate(G_prime, z, i, sigma):
     return G_prime
 
 
-def markovStep(G, z, sigma, n)
+def markovStep(G, z, sigma, m)
     G_prime = G  # create network
     #G_prime.add_nodes_from(G.nodes())
     node_i = random.choice(list(G.prime.nodes()))
@@ -80,9 +80,16 @@ def markovStep(G, z, sigma, n)
     else:
         continue
 
-    G_prime = edgeUpdate(G_prime, z, node_i, sigma, n)
+    G_prime = edgeUpdate(G_prime, z, node_i, sigma, m)
 
+    return G_prime
 
+def timeEvolution(G, z, sigma, m, t)
+    for time in range(t)
+        G = markovStep(G,z,sigma, m)
+        drawGraph
+
+def drawGraph
 
 
 
@@ -91,7 +98,7 @@ if __name__=="__main__":
     t = 100 # number of time steps
     beta = 2 #strength of opinion update
     sigma = 2 #strength of network update
-    n = 2 #affects strength of sigma
+    m = 2 #affects strength of sigma
     z_init = np.random.rand(1)
     G = nx.complete_graph(n)
-    
+    timeEvolution(G,z,sigma, m, t)
