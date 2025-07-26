@@ -1,3 +1,6 @@
+import random
+from typing import Union, Any
+
 import networkx as nx
 import numpy as np
 from scipy.sparse import identity
@@ -33,17 +36,62 @@ def nodeStress(G, s):
     z = FreidkinJohnsonEquilibruim(G, s)
     return disagreement(G, z) + opinion(z), z
 
+def opinionUpdate(G_prime, z, i):
+    n = len(z)
+    op2=0
+    w2 = 0
+    for j in range(n):
+        edgeWeight = G_prime[i][j].get(w)
+        j_z = z[j]
+        op2 = op2+(z[j] * edgeWeight)
+        w2 = w2 + edgeWeight
+    z_prime = (z[i]+op2)/(1+w2)
+    G_prime.nodes[i] = z_prime
+    return z_prime
 
-def markov_chain(G, z):
-    G_prime = nx.graph() # create network
-    G_prime.add_nodes_from(G.nodes())
 
+def edgeUpdate(G_prime, z, i, sigma):
+    n = len(z)
+    loc = z[i]
+    if (loc - n * sigma^2) < 0
+        a = (0 - loc) / sigma^2
+    else
+        a = n
+    if (loc + n * sigma^2) > 1
+        b = (1 - loc) / sigma^2
+    else
+        b = n
+    trunc_dist = truncnorm(a, b, loc, sigma^2)
+    for j in range(n):
+        G_prime[i][j][w]=trunc_dist.pdf(z[j])
 
     return G_prime
+
+
+def markovStep(G, z, sigma, n)
+    G_prime = G  # create network
+    #G_prime.add_nodes_from(G.nodes())
+    node_i = random.choice(list(G.prime.nodes()))
+    z_prime= opinionUpdate(G, z, node_i)
+    bernouli_p = 1 - abs(z[node_i] - z_prime)
+
+    if random.Random() > bernouli_p:
+        return G
+    else:
+        continue
+
+    G_prime = edgeUpdate(G_prime, z, node_i, sigma, n)
+
+
+
 
 
 if __name__=="__main__":
     n = 20 # number of users
     t = 100 # number of time steps
+    beta = 2 #strength of opinion update
+    sigma = 2 #strength of network update
+    n = 2 #affects strength of sigma
     z_init = np.random.rand(1)
     G = nx.complete_graph(n)
+    
