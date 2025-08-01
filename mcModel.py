@@ -1,104 +1,155 @@
-import random
-from typing import Union, Any
-
-import networkx as nx
 import numpy as np
-from scipy.sparse import identity
-from scipy.sparse.linalg import spsolve
 import matplotlib.pyplot as plt
-
-#New version of the model that actually follows the math.
-# A complete graph G(V, E, w)  weighted, undireceded and connected
-# V = [n] (users) E = [m] (edges) w = (weights)
-
-# Friedkin Johnson equilbruim for the expressed opinion of user i
-# INPUT: Graph G, and inate opinion s
-def FreidkinJohnsonEquilibruim(G, s):
-    L = nx.laplacian_matrix(G).astype(float) 
-    I = identity(L.shape[0])
-    return spsolve(I + L, s)
-
-# Returns the disagreement amongst nodes which is how much their opinion differs of the neighborhood
-# INPUT: Graph g, opinion z
-def disagreement(G, z):
-    return sum((w) * (z[u] - z[v])**2 for u, v, w in G.edges(data = 'weight'))
-
-# This is the opionion of each user (not their inate one that is s)
-# INPUT: the opinion z
-def opinion(z):
-    z_spread = z - np.mean(z)
-    return np.dot(z_spread, z_spread)
-
-# Node stress is made up of the disagreement amongst the whole network and that of 
-# each nodes inate opinion
-# INPUT: Graph g, inate opion s
-def nodeStress(G, s):
-    z = FreidkinJohnsonEquilibruim(G, s)
-    return disagreement(G, z) + opinion(z), z
-
-def opinionUpdate(G_prime, z, i):
-    n = len(z)
-    op2=0
-    w2 = 0
-    for j in range(n):
-        edgeWeight = G_prime[i][j].get(w)
-        j_z = z[j]
-        op2 = op2+(z[j] * edgeWeight)
-        w2 = w2 + edgeWeight
-    z_prime = (z[i]+op2)/(1+w2)
-    G_prime.nodes[i] = z_prime
-    return z_prime
+import networkx as nx
+from matplotlib.animation import FuncAnimation
 
 
-def edgeUpdate(G_prime, z, i, sigma):
-    n = len(z)
-    loc = z[i]
-    if (loc - n * sigma^2) < 0
-        a = (0 - loc) / sigma^2
-    else
-        a = n
-    if (loc + n * sigma^2) > 1
-        b = (1 - loc) / sigma^2
-    else
-        b = n
-    trunc_dist = truncnorm(a, b, loc, sigma^2)
-    for j in range(n):
-        G_prime[i][j][w]=trunc_dist.pdf(z[j])
+# (Your MarkovChainPolarizationModel class goes here, unchanged)
+class MarkovChainPolarizationModel:
+    # ... (all your existing code for the class) ...
+    def __init__(self, n, beta=2.0, sigma=0.1, seed=None):
+        self.n = n  # number of nodes
+        self.beta = beta  # sensitivity to opinion updates parameter
+        self.sigma = sigma  # standard deviation for edge weights
+        self.rng = np.random.default_rng(seed)  # random number generator
+        self.z = self.rng.uniform(0, 1, size=n)  # opinions of each node at time step t
+        w = self.rng.uniform(0, 1, size=(n, n))  # weights of edges at current time
+        np.fill_diagonal(w, 0)
+        self.w = w / w.sum(axis=1, keepdims=True)
 
-    return G_prime
+    def opinionUpdate(self):
+        z_prime = np.zeros_like(self.z)
+        for i in range(self.n):
+            weighted_opinions = np.sum(self.w[i] * self.z)
+            z_i = (self.z[i] + weighted_opinions) / (1 + np.sum(self.w[i]))
+            p_i = np.exp(-self.beta * abs(z_i - self.z[i]))
+            p_i = np.clip(p_i, 0, 1)
+            if (self.rng.random() < p_i):
+                z_prime[i] = z_i
+            else:
+                z_prime[i] = self.z[i]
+        self.z = z_prime
+
+    def edgeWeightUpdate(self):
+        w_prime = np.zeros_like(self.w)
+        for i in range(self.n):
+            for j in range(self.n):
+                if i != j:
+                    mu = 1 - abs(self.z[i] - self.z[j])
+                    w_ij = self.rng.normal(mu, self.sigma)
+                    w_prime[i, j] = max(0, w_ij)
+            if w_prime[i].sum() > 0:
+                w_prime[i] /= w_prime[i].sum()
+        self.w = w_prime
+
+    def timeStep(self):
+        self.opinionUpdate()
+        self.edgeWeightUpdate()
+
+    def runModel(self, t=20):
+        opinions = [self.z.copy()]
+        weights = [self.w.copy()]
+        for _ in range(t):
+            self.timeStep()
+            opinions.append(self.z.copy())
+            weights.append(self.w.copy())
+        return np.array(opinions), weights
 
 
-def markovStep(G, z, sigma, m)
-    G_prime = G  # create network
-    #G_prime.add_nodes_from(G.nodes())
-    node_i = random.choice(list(G.prime.nodes()))
-    z_prime= opinionUpdate(G, z, node_i)
-    bernouli_p = 1 - abs(z[node_i] - z_prime)
+# --- REVISED VISUALIZATION FUNCTION ---
+def visualization(opinions, weights, interval=500):
+    n = opinions.shape[1]
+    t = opinions.shape[0]
 
-    if random.Random() > bernouli_p:
-        return G
-    else:
-        continue
+    # Create the graph object, which will be updated
+    Graph = nx.Graph()
+    Graph.add_nodes_from(range(n))
 
-    G_prime = edgeUpdate(G_prime, z, node_i, sigma, m)
+    # We use a stable, initial layout for the y-coordinates
+    initial_y_pos = {i: 2 * (i / (n - 1)) - 1 for i in range(n)}
 
-    return G_prime
+    fig, (network, opinion_traj) = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
+    colors = plt.cm.coolwarm(np.linspace(0, 1, n))
 
-def timeEvolution(G, z, sigma, m, t)
-    for time in range(t)
-        G = markovStep(G,z,sigma, m)
-        drawGraph
+    # --- Opinion Trajectory Setup (unchanged) ---
+    lines = []
+    for i in range(n):
+        (line,) = opinion_traj.plot([], [], color=colors[i], label=f"Node {i}")
+        lines.append(line)
+    opinion_traj.set_xlim(0, t - 1)
+    opinion_traj.set_ylim(0, 1)
+    opinion_traj.set_xlabel("Time Step")
+    opinion_traj.set_ylabel("Opinion Evolution")
+    opinion_traj.legend(loc="upper right")
+    opinion_traj.grid(True, linestyle='--', alpha=0.5)
 
-def drawGraph
+    # --- Network Visualization Setup ---
+    network.set_title("Network Visualization")
+    network.set_xticks([])
+    network.set_yticks([])
+    network.set_xlim(-0.1, 1.1)
+    network.set_ylim(-1.1, 1.1)
+
+    # --- The Animation Update Function (KEY CHANGES HERE) ---
+    def update(frame):
+        # Clear the network plot for the new frame
+        network.clear()
+
+        curr_opinions = opinions[frame]
+        curr_weights_matrix = weights[frame]
+
+        # Update the graph's edges with the current weights
+        Graph.clear_edges()
+        for i in range(n):
+            for j in range(i + 1, n):
+                weight = curr_weights_matrix[i, j]
+                if weight > 0:  # Only add edges with a non-zero weight
+                    Graph.add_edge(i, j, weight=weight)
+
+        # KEY CHANGE: Calculate the layout using nx.spring_layout
+        # The 'weight' attribute of the edges will be used to determine spring strength.
+        # k: ideal distance between nodes.
+        # iterations: one step of the layout algorithm per frame for smooth movement.
+        pos = nx.spring_layout(Graph, pos=None, weight='weight', k=0.5, iterations=5, scale=1)
+
+        # Set the x-position to opinion value and the y-position to a constant for a clearer visualization
+        for node in Graph.nodes():
+            pos[node][0] = curr_opinions[node]
+            # You can uncomment the line below to give the layout a starting y-position
+            # pos[node][1] = initial_y_pos[node]
+
+        node_colors = plt.cm.coolwarm(curr_opinions)
+
+        # Draw the network with the new layout
+        edge_widths = [d['weight'] * 5 for u, v, d in Graph.edges(data=True)]
+
+        nx.draw_networkx_nodes(Graph, pos, node_color=node_colors, node_size=400, ax=network)
+        nx.draw_networkx_edges(Graph, pos, width=edge_widths, edge_color='gray', alpha=0.7, ax=network)
+        nx.draw_networkx_labels(Graph, pos, {i: str(i) for i in range(n)}, ax=network)
+
+        network.set_title(f"Time Step: {frame}")
+        network.axis('off')
+
+        # Set stable limits to prevent the plot from resizing
+        network.set_xlim(-0.1, 1.1)
+        network.set_ylim(-1.1, 1.1)
+
+        # Update opinion trajectories
+        for i in range(n):
+            lines[i].set_data(range(frame + 1), opinions[:frame + 1, i])
+
+        return lines + list(network.get_children())
+
+    # --- Create the Animation ---
+    ani = FuncAnimation(fig, update, frames=t, interval=interval, repeat=False, blit=False)
+    plt.tight_layout()
+    plt.show()
+    return ani
 
 
-
-if __name__=="__main__":
-    n = 20 # number of users
-    t = 100 # number of time steps
-    beta = 2 #strength of opinion update
-    sigma = 2 #strength of network update
-    m = 2 #affects strength of sigma
-    z_init = np.random.rand(1)
-    G = nx.complete_graph(n)
-    timeEvolution(G,z,sigma, m, t)
+# --- Main execution block ---
+if __name__ == "__main__":
+    # The rest of your code is unchanged
+    model = MarkovChainPolarizationModel(n=20, beta=50, sigma=100, seed=42)
+    opinions, weights = model.runModel(t=30)
+    visualization(opinions, weights)
