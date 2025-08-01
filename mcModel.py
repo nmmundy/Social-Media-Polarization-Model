@@ -182,6 +182,6 @@ def visualization(opinions, weights, interval=500):
     return ani
 
 if __name__ == "__main__":
-    model = MarkovChainPolarizationModel(n=15, beta=8, sigma=10, seed=42)
+    model = MarkovChainPolarizationModel(n=15, eta=8, sigma=10, seed=42)
     opinions, weights = model.runModel(t=30)
     visualization(opinions, weights)
