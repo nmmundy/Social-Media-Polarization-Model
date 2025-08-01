@@ -3,59 +3,110 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
 
-
-# (Your MarkovChainPolarizationModel class goes here, unchanged)
 class MarkovChainPolarizationModel:
-    # ... (all your existing code for the class) ...
-    def __init__(self, n, beta=2.0, sigma=0.1, seed=None):
-        self.n = n  # number of nodes
-        self.beta = beta  # sensitivity to opinion updates parameter
-        self.sigma = sigma  # standard deviation for edge weights
-        self.rng = np.random.default_rng(seed)  # random number generator
-        self.z = self.rng.uniform(0, 1, size=n)  # opinions of each node at time step t
-        w = self.rng.uniform(0, 1, size=(n, n))  # weights of edges at current time
+    def __init__(self, n, eta=100.0, beta=3.0, alpha=2.0, sigma=0.1, seed=None):
+        self.n = n # number of nodes
+        self.eta = eta # sensitivity to opinion updates parameter
+        self.sigma = sigma # standard deviation for edge weights
+        self.rng = np.random.default_rng(seed) # random number generator
+        self.beta = beta # parameter for the beta distribution
+        self.alpha = alpha # parameter for beta distribution
+        self.z = self.rng.uniform(0, 1, size=n) # opinions of each node at time step t
+        self.z[n-1]=0
+        self.z[n-2]=1
+
+        w = self.rng.uniform(0, 1, size=(n, n)) # weights of edges at current time
         np.fill_diagonal(w, 0)
         self.w = w / w.sum(axis=1, keepdims=True)
 
     def opinionUpdate(self):
         z_prime = np.zeros_like(self.z)
-        for i in range(self.n):
-            weighted_opinions = np.sum(self.w[i] * self.z)
-            z_i = (self.z[i] + weighted_opinions) / (1 + np.sum(self.w[i]))
-            p_i = np.exp(-self.beta * abs(z_i - self.z[i]))
-            p_i = np.clip(p_i, 0, 1)
-            if (self.rng.random() < p_i):
-                z_prime[i] = z_i
-            else:
-                z_prime[i] = self.z[i]
-        self.z = z_prime
+        z_prime[0]=0
+        z_prime[1]=1
 
-    def edgeWeightUpdate(self):
+        for t in range(2,self.n):
+            ## Below two lines represent Equation 4 in the overleaf
+            weighted_opinions = np.sum(self.w[t] * self.z) 
+            z_i = (self.z[t] + weighted_opinions) / (1 + np.sum(self.w[t]))
+            ## Next line is Equation 5, the probabiliy
+            p_i = np.exp(-self.eta * abs(z_i - self.z[t]))
+
+            if (self.rng.random() < p_i):
+                z_prime[t] = z_i
+
+        self.z = z_prime
+    '''
+    def edgeWeightUpdate(self):  
         w_prime = np.zeros_like(self.w)
         for i in range(self.n):
             for j in range(self.n):
-                if i != j:
-                    mu = 1 - abs(self.z[i] - self.z[j])
+                if i !=j: 
+                    ## mu in equation 8 in overleaf document
+                    mu = 1 - abs(self.z[i] - self.z[j]) 
+                    # equation 8 from overleaf
                     w_ij = self.rng.normal(mu, self.sigma)
-                    w_prime[i, j] = max(0, w_ij)
-            if w_prime[i].sum() > 0:
-                w_prime[i] /= w_prime[i].sum()
-        self.w = w_prime
+                    w_prime[i,j] = max(0, w_ij)
 
+            if w_prime[i].sum() > 0:
+                w_prime[i] /= w_prime[i].sum() # normalization of weights
+        
+        self.w = w_prime
+        '''
+    ## Revised edge weights now company has influence
+    ## self, platform input, target opinion zPrime, strengh of company bias (0,1)
+    def edgeWeightUpdate(self, platformInfluence=True, zPrime=.5, gamma=.5, zeta=10):
+        concentration = 1000
+        w_new = np.zeros_like(self.w)
+        for i in range(self.n):
+            for j in range(self.n):
+                if i != j:
+                    userOpinion = (self.z[i]-self.z[j])
+
+                    if platformInfluence:
+                        companyBias = 1 - gamma * np.exp(-zeta * abs(self.z[j] - zPrime))
+                        mu = (companyBias + userOpinion)/2
+                        print(mu)
+                    else:
+                        mu = userOpinion
+
+                    mu = np.clip(mu, 0.001, .999)
+                    alpha = mu * concentration
+                    beta_ = (1 - mu) * concentration
+
+
+
+                    w_ij = np.random.beta(alpha, beta_)
+                    ##print(w_ij)
+                    w_new[i,j] = w_ij
+
+                p_i = np.exp(-self.eta * abs(self.z[i] - self.z[j]))
+
+
+                if (self.rng.random() < p_i):
+                    w_new[i, j] = 0
+
+                if w_new[i].sum() > 0:
+                    w_new[i, j] = w_ij
+                if w_new[i, j] < .1:
+                    w_new[i, j] = 0
+            
+            self.w = w_new
+    
     def timeStep(self):
         self.opinionUpdate()
         self.edgeWeightUpdate()
 
-    def runModel(self, t=20):
+    def runModel(self, t = 20):
         opinions = [self.z.copy()]
         weights = [self.w.copy()]
+        
         for _ in range(t):
             self.timeStep()
             opinions.append(self.z.copy())
             weights.append(self.w.copy())
+        
         return np.array(opinions), weights
-
-
+    
 # --- REVISED VISUALIZATION FUNCTION ---
 def visualization(opinions, weights, interval=500):
     n = opinions.shape[1]
@@ -146,10 +197,7 @@ def visualization(opinions, weights, interval=500):
     plt.show()
     return ani
 
-
-# --- Main execution block ---
 if __name__ == "__main__":
-    # The rest of your code is unchanged
-    model = MarkovChainPolarizationModel(n=20, beta=50, sigma=100, seed=42)
+    model = MarkovChainPolarizationModel(n=15, eta=.3, sigma=.3, seed=42)
     opinions, weights = model.runModel(t=30)
     visualization(opinions, weights)
