@@ -54,33 +54,42 @@ class MarkovChainPolarizationModel:
         '''
     ## Revised edge weights now company has influence
     ## self, platform input, target opinion zPrime, strengh of company bias (0,1) gamma
-    def edgeWeightUpdate(self, platformInfluence=True, zPrime=.5, gamma=1., zeta=5):
-        concentration = 10
+    def edgeWeightUpdate(self, platformInfluence=True, zPrime=1.0, gamma=1.0, zeta=.5):
+        concentration = 100
         w_new = np.zeros_like(self.w)
         for i in range(self.n):
             for j in range(self.n):
                 if i != j:
-                    userOpinion = 1 - abs(self.z[i] - self.z[j])
-
+                    userOpinion = abs(self.z[i] - self.z[j]) 
+                    print("User Opinion diff: ", userOpinion)
                     if platformInfluence:
-                        companyBias = 1 + gamma * np.exp(-zeta * abs(self.z[j] - zPrime))
-                        mu = companyBias + userOpinion
+                        companyBias = 1 + gamma * np.exp(-zeta * abs(userOpinion - zPrime))
+                        mu = (companyBias * userOpinion )
                     else:
                         mu = userOpinion
 
                     mu = np.clip(mu, 0.001, .999)
+
                     alpha = mu * concentration
                     beta_ = (1 - mu) * concentration
 
                     w_ij = self.rng.beta(alpha, beta_)
-                    print("Current Edge weight: ", w_ij)
-
-                    with open('weights.csv', 'a', newline='') as file:
-                        fieldname = ["edge weight"]
+                    #print("Current Edge weight: ", w_ij)
+                    
+                    with open('weightsV2.csv', 'a', newline='') as file:
+                        fieldname = ["edge weight w_ij", "user opinion diff", "companyBias", "mu", "alpha", "beta"]
                         writer = csv.DictWriter(file, fieldnames=fieldname)
-                        writer.writerow({"edge weight": w_ij})
+                        #writer.writeheader()
+                        writer.writerow({"edge weight w_ij": w_ij,
+                                         "user opinion diff": userOpinion,
+                                         "companyBias": companyBias,
+                                         "mu": mu,
+                                         "alpha": alpha,
+                                         "beta": beta_
+                                         })
+                    
                     w_new[i,j] = w_ij
-
+                
                 if w_new[i].sum() > 0:
                     w_new[i, j] = w_ij
             
@@ -192,6 +201,6 @@ def visualization(opinions, weights, interval=500):
     return ani
 
 if __name__ == "__main__":
-    model = MarkovChainPolarizationModel(n=15, eta=.3, sigma=.3, seed=42)
+    model = MarkovChainPolarizationModel(n=15, eta=0.5, sigma=1.5, seed=42)
     opinions, weights = model.runModel(t=15)
     visualization(opinions, weights)
