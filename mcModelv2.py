@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
 import csv
+#fixed
 
 class MarkovChainPolarizationModel:
     def __init__(self, n, eta=1., beta=3.0, alpha=2.0, sigma=0.1, seed=None):
