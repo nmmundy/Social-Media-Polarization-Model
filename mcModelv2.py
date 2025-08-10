@@ -40,7 +40,7 @@ class MarkovChainPolarizationModel:
     ## Revised edge weights now company has influence
     ## self, platform input, target opinion zPrime, gamma strengh of company bias (0,1)
     ## concentration sets how tight the sampled weights are around mu
-    def edgeWeightUpdate(self, platformInfluence=True, zPrime=0, zeta=10, delta = 1.0):
+    def edgeWeightUpdate(self, platformInfluence=True, zPrime=1, zeta=5, delta = 1.0):
         concentration = 50
         w_new = np.zeros_like(self.w)
         for i in range(self.n):
@@ -49,7 +49,7 @@ class MarkovChainPolarizationModel:
                     userOpinion = (self.z[i]-self.z[j])
                     socialAffinity = 1 - delta * userOpinion
                     if platformInfluence:
-                        companyBias = 1 - np.exp(-zeta * abs(self.z[j] - zPrime)) * (1 - np.exp(-zeta * abs(self.z[i] - zPrime)))
+                        companyBias = np.exp(-zeta * abs((self.z[i] + self.z[j])/2 - zPrime))
                         print("Compay bias", companyBias)
                         socialAffinity = np.clip(socialAffinity, 0, 1)
                         mu = .5 * companyBias * socialAffinity   
