@@ -41,19 +41,19 @@ class MarkovChainPolarizationModel:
     ## Revised edge weights now company has influence
     ## self, platform input, target opinion zPrime, gamma strengh of company bias (0,1)
     ## concentration sets how tight the sampled weights are around mu
-    def edgeWeightUpdate(self, platformInfluence=True, zPrime=1, zeta=5, delta = 1.0):
-        concentration = 50
+    def edgeWeightUpdate(self, platformInfluence=True, zPrime=1, zeta=5, delta = .5):
+        concentration = 40
         w_new = np.zeros_like(self.w)
         for i in range(self.n):
             for j in range(self.n):
                 if i != j:
-                    userOpinion = (self.z[i]-self.z[j])
+                    userOpinion = abs(self.z[i]-self.z[j])
                     socialAffinity = 1 - delta * userOpinion
                     if platformInfluence:
                         companyBias = np.exp(-zeta * abs((self.z[i] + self.z[j])/2 - zPrime))
                         print("Compay bias", companyBias)
                         socialAffinity = np.clip(socialAffinity, 0, 1)
-                        mu = .5 * companyBias * socialAffinity   
+                        mu =  0.5 * companyBias * socialAffinity 
                         #print(mu)
                     else:
                         mu = socialAffinity
@@ -61,25 +61,25 @@ class MarkovChainPolarizationModel:
                     mu = np.clip(mu, 0.001, .999)
                     print("mu", mu)
                     alpha = (mu) * concentration
-                    print("alpha", alpha)
+                    #print("alpha", alpha)
                     beta_ = (1-mu) * concentration
-                    print("beta", beta_)
+                    #print("beta", beta_)
 
                     w_ij = np.random.beta(alpha, beta_)
-                    
+                    '''
                     with open('weightsV2.csv', 'a', newline='') as file:
-                        fieldname = ["edge weight w_ij", "user opinion z_i", "companyBias", "mu", "alpha", "beta"]
+                        fieldname = ["weight", "opinion", "companyBias", "mu", "alpha", "beta"]
                         writer = csv.DictWriter(file, fieldnames=fieldname)
                         #writer.writeheader()
-                        writer.writerow({"edge weight w_ij": w_ij,
-                                         "user opinion z_i": userOpinion,
+                        writer.writerow({"weight": w_ij,
+                                         "opinion": socialAffinity,
                                          "companyBias": companyBias,
                                          "mu": mu,
                                          "alpha": alpha,
                                          "beta": beta_
                                          })
                     
-
+                    '''
                     w_new[i,j] = w_ij
 
                 if w_new[i, j] < .1:
@@ -88,18 +88,15 @@ class MarkovChainPolarizationModel:
             self.w = w_new
 
     def laplacianSpectralGap(self):
-        # Symmetrize the weight matrix (since opinion influence is mutual)
-        W = (self.w + self.w.T) / 2
-
         # Degree matrix
-        D = np.diag(W.sum(axis=1))
+        D = np.diag(self.w.sum(axis=1))
 
         # Laplacian
-        L = D - W
+        L = D - self.w
 
         #Normalized Laplacian: L_norm = D^{-1/2} L D^{-1/2}
         with np.errstate(divide='ignore'):
-            D_inv_sqrt = np.diag(1.0 / np.sqrt(W.sum(axis=1)))
+            D_inv_sqrt = np.diag(1.0 / np.sqrt(self.w.sum(axis=1)))
             D_inv_sqrt[np.isinf(D_inv_sqrt)] = 0.0
 
         L_norm = D_inv_sqrt @ L @ D_inv_sqrt
@@ -224,16 +221,7 @@ def visualization(opinions, weights, interval=250):
 
 if __name__ == "__main__":
     model = MarkovChainPolarizationModel(n=15, eta=.5, sigma=.05, seed=32)
-    opinions, weights = model.runModel(t=40)
+    opinions, weights = model.runModel(t=100)
     L, L_norm, eigvals, gap = model.laplacianSpectralGap()
-    print(f"Spectral gap: {gap:.4f}")
-    print("Eigenvalues:", eigvals)
-    plt.figure()
-    plt.plot(eigvals, marker='o')
-    plt.title("Laplacian Eigenvalues (Normalized)")
-    plt.xlabel("Index")
-    plt.ylabel("Eigenvalue")
-    plt.grid(True)
-    #plt.show()
-
+    print("Polarizatoin smaller = more", gap)
     visualization(opinions, weights)
