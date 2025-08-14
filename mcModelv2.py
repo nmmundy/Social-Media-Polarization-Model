@@ -220,8 +220,18 @@ def visualization(opinions, weights, interval=250):
 
 
 if __name__ == "__main__":
-    model = MarkovChainPolarizationModel(n=15, eta=.5, sigma=.05, seed=32)
-    opinions, weights = model.runModel(t=100)
+    model = MarkovChainPolarizationModel(n=200, eta=.5, sigma=.05, seed=32,)
+    opinions, weights = model.runModel(t=1000)
     L, L_norm, eigvals, gap = model.laplacianSpectralGap()
+    with open('polarization.csv', 'a', newline='') as file:
+                        fieldname = ["gap", "zPrime", "zeta"]
+                        writer = csv.DictWriter(file, fieldnames=fieldname)
+                        #writer.writeheader()
+                        writer.writerow({"gap": gap,
+                                         "zPrime": 1.,
+                                         "zeta": 5,
+                                         })
+                    
+                    
     print("Polarizatoin smaller = more", gap)
     visualization(opinions, weights)
