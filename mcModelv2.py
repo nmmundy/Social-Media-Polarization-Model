@@ -6,7 +6,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.colors import LinearSegmentedColormap
 
 
-# --- MarkovChainPolarizationModel Class (as provided by you) ---
+# --- MarkovChainPolarizationModel Class ---
 class MarkovChainPolarizationModel:
     def __init__(self, n, eta=1., beta=3.0, alpha=2.0, sigma=0.1, seed=None, zprime=1, zeta=1):
         self.n = n  # number of nodes
@@ -23,7 +23,11 @@ class MarkovChainPolarizationModel:
 
         w = self.rng.uniform(0, 1, size=(n, n))  # weights of edges at current time
         np.fill_diagonal(w, 0)
-        self.w = w / w.sum(axis=1, keepdims=True)
+        # Ensure that rows sum to 1 to represent probabilities correctly,
+        # handling cases where sum might be zero (e.g., small n or initial weights)
+        row_sums = w.sum(axis=1, keepdims=True)
+        # Avoid division by zero: if row_sum is 0, keep row as 0
+        self.w = np.divide(w, row_sums, out=np.zeros_like(w), where=row_sums != 0)
 
     def opinionUpdate(self):
         z_prime = np.zeros_like(self.z)
@@ -32,19 +36,26 @@ class MarkovChainPolarizationModel:
 
         for t in range(2, self.n):
             ## Below two lines represent Equation 4 in the overleaf
-            weighted_opinions = np.sum(self.w[t] * self.z)
-            z_i = (self.z[t] + weighted_opinions) / (1 + np.sum(self.w[t]))
+            # Sum of weights from node t to all other nodes (row t of W)
+            sum_w_t = np.sum(self.w[t])
+
+            # Avoid division by zero if node t has no outgoing connections
+            if sum_w_t == 0:
+                z_i = self.z[t]  # Opinion remains unchanged if no connections
+            else:
+                weighted_opinions = np.sum(self.w[t] * self.z)
+                z_i = (self.z[t] + weighted_opinions) / (1 + sum_w_t)
+
             ## Next line is Equation 5, the probabiliy
             p_i = np.exp(-self.eta * abs(z_i - self.z[t]))
 
             if (self.rng.random() < p_i):
                 z_prime[t] = z_i
+            else:
+                z_prime[t] = self.z[t]  # Opinion does not update if condition not met
 
         self.z = z_prime
 
-    ## Revised edge weights now company has influence
-    ## self, platform input, target opinion zPrime, gamma strengh of company bias (0,1)
-    ## concentration sets how tight the sampled weights are around mu
     def edgeWeightUpdate(self, platformInfluence=True, delta=.5):
         zPrime = self.zprime
         zeta = self.zeta
@@ -57,33 +68,18 @@ class MarkovChainPolarizationModel:
                     socialAffinity = 1 - delta * userOpinion
                     if platformInfluence:
                         companyBias = np.exp(-zeta * abs((self.z[i] + self.z[j]) / 2 - zPrime))
-                        # print("Compay bias", companyBias) # Commented for heatmap generation verbosity
                         socialAffinity = np.clip(socialAffinity, 0, 1)
                         mu = 0.5 * companyBias * socialAffinity
-                        # print("mu", mu) # Commented for heatmap generation verbosity
                     else:
                         mu = socialAffinity
-                        # print("mu", mu) # Commented for heatmap generation verbosity
-                    mu = np.clip(mu, 0.001, .999)
+                    mu = np.clip(mu, 0.001, .999)  # Ensure mu is within (0,1) for beta distribution
 
                     alpha = (mu) * concentration
                     beta_ = (1 - mu) * concentration
 
-                    w_ij = np.random.beta(alpha, beta_)
-                    '''
-                    # Uncomment this block if you need to log weights to CSV during heatmap generation
-                    with open('weightsV2.csv', 'a', newline='') as file:
-                        fieldname = ["weight", "opinion", "companyBias", "mu", "alpha", "beta"]
-                        writer = csv.DictWriter(file, fieldnames=fieldname)
-                        #writer.writeheader()
-                        writer.writerow({"weight": w_ij,
-                                         "opinion": socialAffinity,
-                                         "companyBias": companyBias,
-                                         "mu": mu,
-                                         "alpha": alpha,
-                                         "beta": beta_
-                                         })
-                    '''
+                    # Sample from Beta distribution
+                    w_ij = self.rng.beta(alpha, beta_)
+
                     w_new[i, j] = w_ij
 
                 # Small weights are set to 0 to simplify the graph
@@ -94,6 +90,10 @@ class MarkovChainPolarizationModel:
             row_sum = np.sum(w_new[i])
             if row_sum > 0:  # Avoid division by zero for isolated nodes
                 w_new[i] = w_new[i] / row_sum
+            else:
+                # If a row sums to 0, it means the node is isolated,
+                # so its outgoing weights remain 0.
+                pass
 
         self.w = w_new
 
@@ -135,24 +135,37 @@ class MarkovChainPolarizationModel:
 
         return L, L_norm, eigenvalues, spectral_gap
 
+    # --- NEW METHOD: Calculate custom polarization metric ---
+    def calculate_opinion_alignment_polarization(self):
+        """
+        Calculates the custom polarization metric: Sum over i,j (z_i - 1/2)(z_j - 1/2)(w_ij).
+
+        A more negative value indicates higher polarization (disagreement across strong links).
+        A more positive value indicates strong homophily/consensus.
+        """
+        polarization_sum = 0.0
+        for i in range(self.n):
+            for j in range(self.n):
+                # Ensure we only sum non-zero weights or skip self-loops if w_ii is meant to be 0
+                if self.w[i, j] > 0 and i != j:  # Explicitly exclude self-loops as per standard graph theory
+                    term_i = self.z[i] - 0.5
+                    term_j = self.z[j] - 0.5
+                    polarization_sum += term_i * term_j * self.w[i, j]
+        return polarization_sum
+
     def timeStep(self):
         self.opinionUpdate()
         self.edgeWeightUpdate()
 
     def runModel(self, t=30):
-        # opinions = [self.z.copy()] # Only store final state for heatmap
-        # weights = [self.w.copy()] # Only store final state for heatmap
-
+        # We only need the final state for the heatmap calculation
         for _ in range(t):
             self.timeStep()
-            # opinions.append(self.z.copy())
-            # weights.append(self.w.copy())
 
-        # return np.array(opinions), weights # Only return the final state
         return self.z.copy(), self.w.copy()  # Return final opinions and weights
 
 
-# --- Revised Visualization Function (as provided by you, for animation) ---
+# --- Revised Visualization Function (for animation, unchanged) ---
 def visualization(opinions, weights, interval=250):
     n = opinions.shape[1]
     t = opinions.shape[0]
@@ -161,13 +174,10 @@ def visualization(opinions, weights, interval=250):
     Graph = nx.Graph()
     Graph.add_nodes_from(range(n))
 
-    # We use a stable, initial layout for the y-coordinates
-    # initial_y_pos = {i: 2 * (i / (n - 1)) - 1 for i in range(n)} # Not used in final spring_layout call
-
     fig, (network, opinion_traj) = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
     colors = plt.cm.coolwarm(np.linspace(0, 1, n))
 
-    # --- Opinion Trajectory Setup (unchanged) ---
+    # --- Opinion Trajectory Setup ---
     lines = []
     for i in range(n):
         (line,) = opinion_traj.plot([], [], color=colors[i], label=f"Node {i}")
@@ -184,46 +194,29 @@ def visualization(opinions, weights, interval=250):
     network.set_xticks([])
     network.set_yticks([])
     network.set_xlim(-0.1, 1.1)
-    network.set_ylim(-1.1, 1.1)  # Set limits to prevent plot from resizing
+    network.set_ylim(-1.1, 1.1)
 
     # --- The Animation Update Function ---
     def update(frame):
-        # Clear the network plot for the new frame
         network.clear()
 
         curr_opinions = opinions[frame]
         curr_weights_matrix = weights[frame]
 
-        # Update the graph's edges with the current weights
         Graph.clear_edges()
         for i in range(n):
             for j in range(i + 1, n):
                 weight = curr_weights_matrix[i, j]
-                if weight > 0:  # Only add edges with a non-zero weight
+                if weight > 0:
                     Graph.add_edge(i, j, weight=weight)
 
-        # Calculate the layout using nx.spring_layout
-        # pos=None means it will generate an initial random layout or use the previous one if available
-        # k: ideal distance between nodes.
-        # iterations: one step of the layout algorithm per frame for smooth movement.
-        # Fixed seed for spring_layout can make animations consistent if needed
-        # We can pass the previous position `pos` to `spring_layout` for smoother transitions
-        # However, the user's original code does not pass `pos` as an argument to spring_layout's `pos`
-        # and re-calculates it each time, which can lead to jitter if iterations is too low or k is off.
-        # For smooth animations, `pos` should be updated incrementally.
-        # For now, keeping it as the user had it.
         pos = nx.spring_layout(Graph, pos=None, weight='weight', k=0.5, iterations=5, scale=1)
 
-        # Set the x-position to opinion value and the y-position to a constant for a clearer visualization
         for node in Graph.nodes():
             pos[node][0] = curr_opinions[node]
-            # If you want a more stable y-axis in the network, uncomment the line below.
-            # Otherwise, spring_layout will determine both x and y freely.
-            # pos[node][1] = initial_y_pos[node]
 
         node_colors = plt.cm.coolwarm(curr_opinions)
 
-        # Draw the network with the new layout
         edge_widths = [d['weight'] * 5 for u, v, d in Graph.edges(data=True)]
 
         nx.draw_networkx_nodes(Graph, pos, node_color=node_colors, node_size=400, ax=network)
@@ -231,69 +224,59 @@ def visualization(opinions, weights, interval=250):
         nx.draw_networkx_labels(Graph, pos, {i: str(i) for i in range(n)}, ax=network)
 
         network.set_title(f"Time Step: {frame}")
-        network.axis('off')  # Hide axes for cleaner network visualization
+        network.axis('off')
 
-        # Set stable limits to prevent the plot from resizing
         network.set_xlim(-0.1, 1.1)
         network.set_ylim(-1.1, 1.1)
 
-        # Update opinion trajectories
         for i in range(n):
             lines[i].set_data(range(frame + 1), opinions[:frame + 1, i])
 
-        # Return all artists that have been modified for blitting
-        # For blit=False, this return value is not strictly necessary but good practice.
         return lines + network.collections + network.patches + network.texts
 
-    # --- Create the Animation ---
     ani = FuncAnimation(fig, update, frames=t, interval=interval, repeat=False, blit=False)
     plt.tight_layout()
     plt.show()
     return ani
 
 
-# --- Function to calculate Polarization (Spectral Gap) for Heatmap ---
+# --- Function to calculate Polarization (Custom Metric) for Heatmap ---
 def calculate_polarization_for_heatmap(zprime_val, zeta_val):
     """
-    Calculates the 'polarization' value (spectral gap) using the MarkovChainPolarizationModel
-    for given zprime and zeta values.
+    Calculates the 'polarization' value using the MarkovChainPolarizationModel
+    for given zprime and zeta values, using the custom sum metric.
 
     Args:
         zprime_val (float): The target opinion of the company.
         zeta_val (float): The strength of company bias.
 
     Returns:
-        float: The calculated spectral gap, representing polarization.
+        float: The calculated custom polarization value.
     """
-    # Instantiate the model with the given zprime and zeta
-    # Use consistent parameters for n, eta, beta, alpha, sigma, seed for the heatmap calculation.
-    # These parameters define the *environment* in which polarization is measured.
     model_instance = MarkovChainPolarizationModel(
         n=15,  # Number of nodes
         eta=0.5,  # Sensitivity to opinion updates
-        beta=3.0,  # Beta distribution parameter (from your example)
-        alpha=2.0,  # Beta distribution parameter (from your example)
-        sigma=0.1,  # Standard deviation for edge weights (from your example)
+        beta=3.0,  # Beta distribution parameter
+        alpha=2.0,  # Beta distribution parameter
+        sigma=0.1,  # Standard deviation for edge weights
         seed=42,  # Fixed seed for reproducibility across heatmap calculations
         zprime=zprime_val,
         zeta=zeta_val
     )
 
-    # Run the model for a few time steps to allow opinions/weights to stabilize.
-    # The number of steps here might need tuning based on how quickly your model converges.
-    run_steps = 50
-    final_opinions, final_weights = model_instance.runModel(t=run_steps)
+    run_steps = 50  # Number of steps to run the model before calculating polarization
+    model_instance.runModel(t=run_steps)  # Run the model to reach a stable state
 
-    # Get the spectral gap from the final state of the model
-    _, _, _, spectral_gap = model_instance.laplacianSpectralGap()
+    # Get the custom polarization from the final state of the model
+    custom_polarization = model_instance.calculate_opinion_alignment_polarization()
 
-    return spectral_gap
+    return custom_polarization
 
 
 # --- Heatmap Generation Function ---
 def generate_polarization_heatmap(zprime_min, zprime_max, zeta_min, zeta_max, resolution):
     """
-    Generates and displays a heatmap of polarization values (spectral gap).
+    Generates and displays a heatmap of custom polarization values.
 
     Args:
         zprime_min (float): Minimum value for zprime.
@@ -304,54 +287,54 @@ def generate_polarization_heatmap(zprime_min, zprime_max, zeta_min, zeta_max, re
                           Higher resolution means more detail but longer computation time.
     """
 
-    # Create arrays for zprime and zeta values
     zprime_values = np.linspace(zprime_min, zprime_max, resolution)
+
+    # Reverting to linear scale for zeta
     zeta_values = np.linspace(zeta_min, zeta_max, resolution)
 
-    # Initialize a 2D array to store polarization values
     polarization_data = np.zeros((resolution, resolution))
 
     print(
-        f"Generating heatmap for zprime from {zprime_min} to {zprime_max} and zeta from {zeta_min} to {zeta_max} with resolution {resolution}x{resolution}...")
+        f"Generating heatmap for zprime from {zprime_min} to {zprime_max} and zeta from {zeta_min} to {zeta_max} (linear scale) with resolution {resolution}x{resolution}...")
 
-    # Calculate polarization for each combination of zprime and zeta
     for i in range(resolution):
-        # Progress indicator (optional, as calculation can be long for high resolution)
         if (i + 1) % (resolution // 10) == 0 or i == resolution - 1:
             print(f"Calculating row {i + 1}/{resolution}...")
         for j in range(resolution):
-            current_zprime = zprime_values[j]  # zprime maps to x-axis
-            current_zeta = zeta_values[i]  # zeta maps to y-axis (row index)
+            current_zprime = zprime_values[j]
+            current_zeta = zeta_values[i]
             polarization_data[i, j] = calculate_polarization_for_heatmap(current_zprime, current_zeta)
 
     # --- Plotting the Heatmap ---
     plt.figure(figsize=(10, 8))
 
-    # Define a custom colormap that clearly shows varying polarization.
-    # A diverging colormap like 'RdYlGn' or 'seismic' can be good if polarization
-    # can be both positive and negative, or if a clear "neutral" value exists.
-    # For spectral gap, often lower values mean more polarization (bad), higher values mean less (good).
-    # So, we might want to map low values to a "red/bad" color and high values to a "green/good" color.
-    # The current "blue, white, red" is also a good diverging map if center is neutral.
-    # Let's use a standard diverging map or define one based on meaning of polarization.
-    # Assuming lower spectral gap = higher polarization (as per your print statement "Polarizatoin smaller = more")
-    # We want red for small gap (high polarization) and blue for large gap (low polarization)
-    colors = ["red", "white", "blue"]  # From high polarization (low gap) to low polarization (high gap)
-    cmap = LinearSegmentedColormap.from_list("polarization_cmap", colors, N=256)
+    # For this new metric:
+    #   Negative values: higher polarization (disagreement across links)
+    #   Positive values: lower polarization (homophily/agreement across links)
+    # Using 'seismic' colormap: blue for negative, white for zero, red for positive.
+    # So, blue will be higher polarization, red will be lower polarization (more alignment).
+    cmap = plt.cm.seismic  # Blue (negative) -> White (zero) -> Red (positive)
 
-    # Use imshow to create the heatmap
-    # extent: [xmin, xmax, ymin, ymax] for correct axis labeling
-    # origin='lower': Makes (0,0) the bottom-left corner, matching standard plots
+    # You can reverse it if you want red for high polarization (negative values)
+    # cmap = plt.cm.seismic_r # Red (negative) -> White (zero) -> Blue (positive)
+
+    # To ensure the heatmap spans the full range of values and centers around 0,
+    # find min/max and use vmin/vmax with a symmetric color scale.
+    max_abs_val = np.max(np.abs(polarization_data))
+
     img = plt.imshow(polarization_data, cmap=cmap, origin='lower',
                      extent=[zprime_min, zprime_max, zeta_min, zeta_max],
-                     aspect='auto')  # aspect='auto' adjusts to fit the figure size
+                     aspect='auto',
+                     vmin=-max_abs_val, vmax=max_abs_val)  # Symmetrically center colormap around zero
 
-    plt.colorbar(img, label='Spectral Gap (Polarization Value)')
-    plt.xlabel("Z-prime (Target Opinion)")
-    plt.ylabel("Zeta (Strength of Company Bias)")
-    plt.title("Polarization (Spectral Gap) Heatmap for Z-prime and Zeta")
-    plt.grid(True, linestyle='--', alpha=0.6)  # Add a subtle grid
-    plt.tight_layout()  # Adjust layout to prevent labels from overlapping
+    plt.colorbar(img, label='Opinion Alignment Polarization Sum')
+    plt.xlabel("Z-prime (Company Target Opinion)")
+    # Reverting to linear scale label for zeta
+    plt.ylabel("Zeta (Strength of Company Bias) - Linear Scale")
+    # Removed plt.yscale('log')
+    plt.title("Opinion Alignment Polarization Heatmap")
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout()
     plt.show()
 
 
@@ -360,9 +343,9 @@ if __name__ == "__main__":
     # --- Parameters for Heatmap Generation ---
     z_prime_min = 0.0
     z_prime_max = 1.0
-    zeta_min_val = 0.0
-    zeta_max_val = 10.0
-    resolution_val = 50  # Lower resolution for faster initial testing, increase for detail
+    zeta_min_val = 0.0  # Reverted to 0.0 for linear scale
+    zeta_max_val = 100.0
+    resolution_val = 25  # Lower resolution for faster initial testing, increase for detail
 
     # Generate the heatmap
     generate_polarization_heatmap(z_prime_min, z_prime_max, zeta_min_val, zeta_max_val, resolution_val)
