@@ -29,19 +29,19 @@ class MarkovChainPolarizationModel:
         for t in range(2,self.n):
             ## Below two lines represent Equation 4 in the overleaf
             weighted_opinions = np.sum(self.w[t] * self.z) 
-            z_i = (self.z[t] + weighted_opinions) / (1 + np.sum(self.w[t]))
+            z_i = (self.eta * self.z[t] + weighted_opinions) / (self.eta + np.sum(self.w[t]))
             ## Next line is Equation 5, the probabiliy
-            p_i = np.exp(-self.eta * abs(z_i - self.z[t]))
+            #p_i = np.exp(-self.eta * abs(z_i - self.z[t]))
 
-            if (self.rng.random() < p_i):
-                z_prime[t] = z_i
+            #if (self.rng.random() < p_i):
+            z_prime[t] = z_i
 
         self.z = z_prime
 
     ## Revised edge weights now company has influence
     ## self, platform input, target opinion zPrime, gamma strengh of company bias (0,1)
     ## concentration sets how tight the sampled weights are around mu
-    def edgeWeightUpdate(self, platformInfluence=True, zPrime=1, zeta=5, delta = .5):
+    def edgeWeightUpdate(self, platformInfluence=True, zPrime=.5, zeta=4, delta = .5):
         concentration = 40
         w_new = np.zeros_like(self.w)
         for i in range(self.n):
@@ -152,7 +152,7 @@ def visualization(opinions, weights, interval=250):
     opinion_traj.set_ylim(0, 1)
     opinion_traj.set_xlabel("Time Step")
     opinion_traj.set_ylabel("Opinion Evolution")
-    opinion_traj.legend(loc="upper right")
+    #opinion_traj.legend(loc="upper right")
     opinion_traj.grid(True, linestyle='--', alpha=0.5)
 
     # --- Network Visualization Setup ---
@@ -220,8 +220,8 @@ def visualization(opinions, weights, interval=250):
 
 
 if __name__ == "__main__":
-    model = MarkovChainPolarizationModel(n=200, eta=.5, sigma=.05, seed=32,)
-    opinions, weights = model.runModel(t=1000)
+    model = MarkovChainPolarizationModel(n=20, eta=.5, sigma=.05, seed=32,)
+    opinions, weights = model.runModel(t=50)
     L, L_norm, eigvals, gap = model.laplacianSpectralGap()
     with open('polarization.csv', 'a', newline='') as file:
                         fieldname = ["gap", "zPrime", "zeta"]
